@@ -17,8 +17,19 @@ from langchain_community.document_loaders import (
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
+
+# ================= LOAD ENV VARIABLES =================
+load_dotenv()
+groq_api_key = os.getenv("GROQ_API_KEY")
+
+if not groq_api_key:
+    st.error("❌ GROQ_API_KEY not found. Please set it in environment variables.")
+    st.stop()
+
+
 # ================= PAGE CONFIG =================
 st.set_page_config(page_title="AI ChatBot", layout="wide")
+
 
 # ================= CUSTOM CSS =================
 st.markdown("""
@@ -54,8 +65,15 @@ footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-# ================= LOAD ENV =================
-load_dotenv()
+
+# ================= LLM INITIALIZATION =================
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",
+    temperature=0,
+    max_tokens=800,
+    groq_api_key=groq_api_key
+)
+
 
 # ================= TOP BANNER =================
 st.markdown("""
@@ -63,6 +81,7 @@ st.markdown("""
     Welcome to Multi-Document AI Chat Bot
 </div>
 """, unsafe_allow_html=True)
+
 
 # ================= SIDEBAR =================
 st.sidebar.title("📂 Data Sources")
@@ -99,7 +118,7 @@ uploaded_excels = st.sidebar.file_uploader(
     accept_multiple_files=True
 )
 
-# ✅ ---- JSON UPLOAD ----
+# ---- JSON UPLOAD ----
 st.sidebar.subheader("Upload JSON Documents")
 uploaded_jsons = st.sidebar.file_uploader(
     "Upload .json files",
@@ -109,17 +128,12 @@ uploaded_jsons = st.sidebar.file_uploader(
 
 process_clicked = st.sidebar.button("⚙️ Process Data")
 
+
 # ================= CONSTANTS =================
 VECTORSTORE_PATH = "faiss_store.pkl"
 UPLOAD_DIR = "uploaded_docs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# ================= LLM =================
-llm = ChatGroq(
-    model="llama-3.1-8b-instant",
-    temperature=0,
-    max_tokens=800
-)
 
 # ================= PROCESS DATA =================
 if process_clicked:
@@ -202,7 +216,7 @@ if process_clicked:
                 except Exception:
                     st.sidebar.warning(f"Failed to load Excel file: {file.name}")
 
-        # ✅ ---- LOAD JSON ----
+        # ---- LOAD JSON ----
         if uploaded_jsons:
             for file in uploaded_jsons:
                 file_path = os.path.join(UPLOAD_DIR, file.name)
@@ -214,7 +228,6 @@ if process_clicked:
                     with open(file_path, "r", encoding="utf-8") as f:
                         json_data = json.load(f)
 
-                    # If JSON is a list → treat each item separately (better retrieval)
                     if isinstance(json_data, list):
                         for index, item in enumerate(json_data):
                             documents.append(
@@ -226,8 +239,6 @@ if process_clicked:
                                     }
                                 )
                             )
-
-                    # If JSON is a dictionary
                     elif isinstance(json_data, dict):
                         documents.append(
                             Document(
@@ -235,7 +246,6 @@ if process_clicked:
                                 metadata={"source": file.name}
                             )
                         )
-
                 except Exception:
                     st.sidebar.warning(f"Failed to load JSON file: {file.name}")
 
@@ -261,11 +271,10 @@ if process_clicked:
 
             st.sidebar.success("✅ Data processed successfully!")
 
+
 # ================= CHAT HISTORY =================
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-st.markdown('<div class="chat-scroll">', unsafe_allow_html=True)
 
 chat_container = st.container()
 with chat_container:
@@ -273,7 +282,6 @@ with chat_container:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ================= CHAT INPUT =================
 query = st.chat_input("Ask something about your uploaded data...")
