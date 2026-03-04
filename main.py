@@ -246,7 +246,7 @@ if process_clicked:
             split_docs = splitter.split_documents(documents)
 
             # LIGHTWEIGHT EMBEDDINGS (NO TORCH)
-            embeddings = FastEmbedEmbeddings()
+            embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
 
             vectorstore = FAISS.from_documents(split_docs, embeddings)
 
@@ -292,6 +292,7 @@ if query:
     else:
         with st.chat_message("assistant"):
             st.warning("⚠️ Please process URLs or documents first.")
+
 
 
 
