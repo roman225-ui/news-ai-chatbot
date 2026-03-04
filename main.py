@@ -1,44 +1,26 @@
 import os
+import pickle
 import json
-import gc
-import requests
 import streamlit as st
 import pandas as pd
 from dotenv import load_dotenv
-from bs4 import BeautifulSoup
 
 from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
-
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import FastEmbedEmbeddings
-
 from langchain_community.document_loaders import (
+    WebBaseLoader,
     Docx2txtLoader,
     PyPDFLoader
 )
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
-# -------------------
-# ENV
-# -------------------
-
-load_dotenv()
-groq_api_key = os.getenv("GROQ_API_KEY")
-
-if not groq_api_key:
-    st.error("❌ GROQ_API_KEY not found")
-    st.stop()
-
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-# -------------------
-# PAGE
-# -------------------
-
+# ================= PAGE CONFIG =================
 st.set_page_config(page_title="AI ChatBot", layout="wide")
 
+# ================= CUSTOM CSS =================
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
@@ -72,167 +54,138 @@ footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
+# ================= LOAD ENV =================
+load_dotenv()
+
+# ================= TOP BANNER =================
 st.markdown("""
 <div class="fixed-top-banner">
     Welcome to Multi-Document AI Chat Bot
 </div>
 """, unsafe_allow_html=True)
 
-# -------------------
-# LLM
-# -------------------
-
-llm = ChatGroq(
-    model="llama-3.1-8b-instant",
-    temperature=0,
-    max_tokens=800,
-    groq_api_key=groq_api_key
-)
-
-# -------------------
-# SIDEBAR
-# -------------------
-
+# ================= SIDEBAR =================
 st.sidebar.title("📂 Data Sources")
+
+# ---- URL INPUT ----
 st.sidebar.subheader("Enter Article URLs")
-
 urls = []
+for i in range(3):
+    url = st.sidebar.text_input(f"URL {i + 1}")
+    if url:
+        urls.append(url)
 
-for i in range(2):
-    u = st.sidebar.text_input(f"URL {i+1}")
-    if u:
-        urls.append(u)
-
+# ---- WORD UPLOAD ----
+st.sidebar.subheader("Upload Word Documents")
 uploaded_docs = st.sidebar.file_uploader(
-    "Upload Word (.docx)",
+    "Upload .docx files",
     type=["docx"],
     accept_multiple_files=True
 )
 
+# ---- PDF UPLOAD ----
+st.sidebar.subheader("Upload PDF Documents")
 uploaded_pdfs = st.sidebar.file_uploader(
-    "Upload PDF",
+    "Upload .pdf files",
     type=["pdf"],
     accept_multiple_files=True
 )
 
+# ---- EXCEL UPLOAD ----
+st.sidebar.subheader("Upload Excel Documents")
 uploaded_excels = st.sidebar.file_uploader(
-    "Upload Excel",
+    "Upload .xlsx files",
     type=["xlsx"],
     accept_multiple_files=True
 )
 
+# ✅ ---- JSON UPLOAD ----
+st.sidebar.subheader("Upload JSON Documents")
 uploaded_jsons = st.sidebar.file_uploader(
-    "Upload JSON",
+    "Upload .json files",
     type=["json"],
     accept_multiple_files=True
 )
 
 process_clicked = st.sidebar.button("⚙️ Process Data")
 
-# -------------------
-# PROCESS DATA
-# -------------------
+# ================= CONSTANTS =================
+VECTORSTORE_PATH = "faiss_store.pkl"
+UPLOAD_DIR = "uploaded_docs"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+# ================= LLM =================
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",
+    temperature=0,
+    max_tokens=800
+)
+
+# ================= PROCESS DATA =================
 if process_clicked:
-
-    documents = []
-
     with st.spinner("Processing documents..."):
+        documents = []
 
-        # -------- URLs --------
-
+        # ---- LOAD URLS ----
         for url in urls:
-
+            if not url.startswith("http"):
+                st.sidebar.warning(f"Invalid URL skipped: {url}")
+                continue
             try:
-
-                st.sidebar.write(f"Loading {url}")
-
-                headers = {"User-Agent": "Mozilla/5.0"}
-
-                response = requests.get(url, headers=headers, timeout=10)
-
-                soup = BeautifulSoup(response.text, "html.parser")
-
-                text = soup.get_text(separator=" ", strip=True)
-
-                text = text[:10000]  # limit memory
-
-                documents.append(
-                    Document(
-                        page_content=text,
-                        metadata={"source": url}
-                    )
-                )
-
+                docs = WebBaseLoader(url).load()
+                for d in docs:
+                    d.metadata["source"] = url
+                documents.extend(docs)
             except Exception:
-                st.sidebar.warning(f"Failed: {url}")
+                st.sidebar.warning(f"Failed to load URL: {url}")
 
-        # -------- WORD --------
-
+        # ---- LOAD WORD ----
         if uploaded_docs:
-
-            for file in uploaded_docs[:2]:
-
-                path = f"/tmp/{file.name}"
-
-                with open(path, "wb") as f:
+            for file in uploaded_docs:
+                file_path = os.path.join(UPLOAD_DIR, file.name)
+                with open(file_path, "wb") as f:
                     f.write(file.getbuffer())
 
                 try:
-
-                    loader = Docx2txtLoader(path)
+                    loader = Docx2txtLoader(file_path)
                     docs = loader.load()
-
+                    for d in docs:
+                        d.metadata["source"] = file.name
                     documents.extend(docs)
+                except Exception:
+                    st.sidebar.warning(f"Failed to load Word file: {file.name}")
 
-                except:
-                    st.sidebar.warning(f"Failed {file.name}")
-
-        # -------- PDF --------
-
+        # ---- LOAD PDF ----
         if uploaded_pdfs:
-
-            for file in uploaded_pdfs[:2]:
-
-                path = f"/tmp/{file.name}"
-
-                with open(path, "wb") as f:
+            for file in uploaded_pdfs:
+                file_path = os.path.join(UPLOAD_DIR, file.name)
+                with open(file_path, "wb") as f:
                     f.write(file.getbuffer())
 
                 try:
-
-                    loader = PyPDFLoader(path)
+                    loader = PyPDFLoader(file_path)
                     docs = loader.load()
-
+                    for d in docs:
+                        d.metadata["source"] = file.name
                     documents.extend(docs)
+                except Exception:
+                    st.sidebar.warning(f"Failed to load PDF file: {file.name}")
 
-                except:
-                    st.sidebar.warning(f"Failed {file.name}")
-
-        # -------- EXCEL --------
-
-              if uploaded_excels:
-
-            for file in uploaded_excels[:1]:
-
-                path = f"/tmp/{file.name}"
-
-                with open(path, "wb") as f:
+        # ---- LOAD EXCEL ----
+        if uploaded_excels:
+            for file in uploaded_excels:
+                file_path = os.path.join(UPLOAD_DIR, file.name)
+                with open(file_path, "wb") as f:
                     f.write(file.getbuffer())
 
                 try:
-
-                    excel_data = pd.read_excel(path, sheet_name=None)
+                    excel_data = pd.read_excel(file_path, sheet_name=None)
 
                     for sheet_name, df in excel_data.items():
-
                         df = df.fillna("")
-                        df.columns = df.columns.str.strip()
 
                         for index, row in df.iterrows():
-
                             row_text = f"Sheet: {sheet_name}\n"
-
                             for column in df.columns:
                                 row_text += f"{column}: {row[column]}\n"
 
@@ -246,127 +199,114 @@ if process_clicked:
                                     }
                                 )
                             )
-
                 except Exception:
                     st.sidebar.warning(f"Failed to load Excel file: {file.name}")
 
-        # -------- JSON --------
-
+        # ✅ ---- LOAD JSON ----
         if uploaded_jsons:
+            for file in uploaded_jsons:
+                file_path = os.path.join(UPLOAD_DIR, file.name)
 
-            for file in uploaded_jsons[:1]:
-
-                path = f"/tmp/{file.name}"
-
-                with open(path, "wb") as f:
+                with open(file_path, "wb") as f:
                     f.write(file.getbuffer())
 
                 try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        json_data = json.load(f)
 
-                    with open(path) as f:
-                        data = json.load(f)
+                    # If JSON is a list → treat each item separately (better retrieval)
+                    if isinstance(json_data, list):
+                        for index, item in enumerate(json_data):
+                            documents.append(
+                                Document(
+                                    page_content=json.dumps(item, indent=2),
+                                    metadata={
+                                        "source": file.name,
+                                        "record": index
+                                    }
+                                )
+                            )
 
-                    text = json.dumps(data)
-
-                    text = text[:8000]
-
-                    documents.append(
-                        Document(
-                            page_content=text,
-                            metadata={"source": file.name}
+                    # If JSON is a dictionary
+                    elif isinstance(json_data, dict):
+                        documents.append(
+                            Document(
+                                page_content=json.dumps(json_data, indent=2),
+                                metadata={"source": file.name}
+                            )
                         )
-                    )
 
-                except:
-                    st.sidebar.warning(f"Failed {file.name}")
+                except Exception:
+                    st.sidebar.warning(f"Failed to load JSON file: {file.name}")
 
-        # -------- LIMIT DOCS --------
-
-        documents = documents[:5]
-
+        # ---- FINAL CHECK ----
         if not documents:
-
-            st.sidebar.error("No documents loaded")
-
+            st.sidebar.error("No valid URLs or documents found.")
         else:
-
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=300,
-                chunk_overlap=50
+                chunk_size=500,
+                chunk_overlap=100
             )
 
             split_docs = splitter.split_documents(documents)
 
-            split_docs = split_docs[:100]
-
-            embeddings = FastEmbedEmbeddings(
-                model_name="BAAI/bge-small-en-v1.5"
+            embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
 
-            vectorstore = FAISS.from_documents(
-                split_docs,
-                embeddings
-            )
+            vectorstore = FAISS.from_documents(split_docs, embeddings)
 
-            st.session_state.vectorstore = vectorstore
+            with open(VECTORSTORE_PATH, "wb") as f:
+                pickle.dump(vectorstore, f)
 
-            gc.collect()
+            st.sidebar.success("✅ Data processed successfully!")
 
-            st.sidebar.success("✅ Documents processed")
-
-# -------------------
-# CHAT
-# -------------------
-
+# ================= CHAT HISTORY =================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-for msg in st.session_state.messages:
+st.markdown('<div class="chat-scroll">', unsafe_allow_html=True)
 
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+chat_container = st.container()
+with chat_container:
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
-query = st.chat_input("Ask about your documents")
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ================= CHAT INPUT =================
+query = st.chat_input("Ask something about your uploaded data...")
 
 if query:
+    st.session_state.messages.append({"role": "user", "content": query})
 
-    st.session_state.messages.append(
-        {"role": "user", "content": query}
-    )
+    with chat_container:
+        with st.chat_message("user"):
+            st.markdown(query)
 
-    with st.chat_message("user"):
-        st.markdown(query)
-
-    if "vectorstore" in st.session_state:
-
-        retriever = st.session_state.vectorstore.as_retriever(
-            search_kwargs={"k": 3}
-        )
+    if os.path.exists(VECTORSTORE_PATH):
+        with open(VECTORSTORE_PATH, "rb") as f:
+            vectorstore = pickle.load(f)
 
         qa = RetrievalQA.from_chain_type(
             llm=llm,
             chain_type="stuff",
-            retriever=retriever
+            retriever=vectorstore.as_retriever(search_kwargs={"k": 6}),
+            return_source_documents=True
         )
 
-        with st.chat_message("assistant"):
-
-            with st.spinner("Thinking..."):
-
-                result = qa({"query": query})
-
-                answer = result["result"]
-
-                st.markdown(answer)
+        with chat_container:
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    result = qa({"query": query})
+                    answer = result["result"]
+                    st.markdown(answer)
 
         st.session_state.messages.append(
             {"role": "assistant", "content": answer}
         )
-
     else:
-
-        st.warning("⚠️ Please process documents first.")
-
-
-
-
+        with chat_container:
+            with st.chat_message("assistant"):
+                st.warning("⚠️ Please process URLs or documents first.")
