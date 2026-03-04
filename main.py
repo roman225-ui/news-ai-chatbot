@@ -14,7 +14,7 @@ from langchain_community.document_loaders import (
     PyPDFLoader
 )
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import FakeEmbeddings
+from langchain_community.embeddings import FastEmbedEmbeddings
 
 
 # LOAD ENV
@@ -246,7 +246,7 @@ if process_clicked:
             split_docs = splitter.split_documents(documents)
 
             # LIGHTWEIGHT EMBEDDINGS (NO TORCH)
-            embeddings = FakeEmbeddings(size=384)
+            embeddings = FastEmbedEmbeddings()
 
             vectorstore = FAISS.from_documents(split_docs, embeddings)
 
@@ -292,5 +292,6 @@ if query:
     else:
         with st.chat_message("assistant"):
             st.warning("⚠️ Please process URLs or documents first.")
+
 
 
