@@ -211,42 +211,35 @@ if process_clicked:
 
         # -------- EXCEL --------
 
-        if uploaded_excels:
+               if uploaded_excels:
+            for file in uploaded_excels:
+                file_path = os.path.join(UPLOAD_DIR, file.name)
+                with open(file_path, "wb") as f:
+                    f.write(file.getbuffer())
 
-    for file in uploaded_excels[:1]:
+                try:
+                    excel_data = pd.read_excel(file_path, sheet_name=None)
 
-        path = f"/tmp/{file.name}"
+                    for sheet_name, df in excel_data.items():
+                        df = df.fillna("")
 
-        with open(path, "wb") as f:
-            f.write(file.getbuffer())
+                        for index, row in df.iterrows():
+                            row_text = f"Sheet: {sheet_name}\n"
+                            for column in df.columns:
+                                row_text += f"{column}: {row[column]}\n"
 
-        try:
-
-            df = pd.read_excel(path)
-
-            df.columns = df.columns.str.strip()
-            df = df.fillna("")
-            df = df.head(100)
-
-            for index, row in df.iterrows():
-
-                row_text = ""
-
-                for column in df.columns:
-                    row_text += f"{column}: {row[column]}\n"
-
-                documents.append(
-                    Document(
-                        page_content=row_text,
-                        metadata={
-                            "source": file.name,
-                            "row": index
-                        }
-                    )
-                )
-
-        except Exception as e:
-            st.sidebar.warning(f"Failed {file.name}")
+                            documents.append(
+                                Document(
+                                    page_content=row_text,
+                                    metadata={
+                                        "source": file.name,
+                                        "sheet": sheet_name,
+                                        "row": index
+                                    }
+                                )
+                            )
+                except Exception:
+                    st.sidebar.warning(f"Failed to load Excel file: {file.name}")
 
         # -------- JSON --------
 
@@ -364,5 +357,6 @@ if query:
     else:
 
         st.warning("⚠️ Please process documents first.")
+
 
 
