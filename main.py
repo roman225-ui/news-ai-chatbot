@@ -211,20 +211,28 @@ if process_clicked:
 
         # -------- EXCEL --------
 
-               if uploaded_excels:
-            for file in uploaded_excels:
-                file_path = os.path.join(UPLOAD_DIR, file.name)
-                with open(file_path, "wb") as f:
+              if uploaded_excels:
+
+            for file in uploaded_excels[:1]:
+
+                path = f"/tmp/{file.name}"
+
+                with open(path, "wb") as f:
                     f.write(file.getbuffer())
 
                 try:
-                    excel_data = pd.read_excel(file_path, sheet_name=None)
+
+                    excel_data = pd.read_excel(path, sheet_name=None)
 
                     for sheet_name, df in excel_data.items():
+
                         df = df.fillna("")
+                        df.columns = df.columns.str.strip()
 
                         for index, row in df.iterrows():
+
                             row_text = f"Sheet: {sheet_name}\n"
+
                             for column in df.columns:
                                 row_text += f"{column}: {row[column]}\n"
 
@@ -238,6 +246,7 @@ if process_clicked:
                                     }
                                 )
                             )
+
                 except Exception:
                     st.sidebar.warning(f"Failed to load Excel file: {file.name}")
 
@@ -357,6 +366,7 @@ if query:
     else:
 
         st.warning("⚠️ Please process documents first.")
+
 
 
 
