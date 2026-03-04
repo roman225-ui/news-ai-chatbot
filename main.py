@@ -239,8 +239,8 @@ if process_clicked:
             st.sidebar.error("No valid URLs or documents found.")
         else:
             splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200
+                chunk_size=500,
+                chunk_overlap=100
             )
 
             split_docs = splitter.split_documents(documents)
@@ -292,6 +292,7 @@ if query:
     else:
         with st.chat_message("assistant"):
             st.warning("⚠️ Please process URLs or documents first.")
+
 
 
 
