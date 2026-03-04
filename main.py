@@ -250,13 +250,9 @@ if process_clicked:
 
             split_docs = splitter.split_documents(documents)
 
-           @st.cache_resource
-            def load_embeddings():
-                return HuggingFaceEmbeddings(
-                    model_name="sentence-transformers/all-MiniLM-L6-v2"
-                )
-
-embeddings = load_embeddings()
+           embeddings = HuggingFaceEmbeddings(
+              model_name="sentence-transformers/all-MiniLM-L6-v2"
+            )
 
             vectorstore = FAISS.from_documents(split_docs, embeddings)
 
@@ -314,4 +310,5 @@ if query:
         with chat_container:
             with st.chat_message("assistant"):
                 st.warning("⚠️ Please process URLs or documents first.")
+
 
