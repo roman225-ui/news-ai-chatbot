@@ -17,7 +17,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import FakeEmbeddings
 
 
-# ================= LOAD ENV =================
+# LOAD ENV
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 
@@ -26,11 +26,50 @@ if not groq_api_key:
     st.stop()
 
 
-# ================= PAGE CONFIG =================
+# PAGE CONFIG
 st.set_page_config(page_title="AI ChatBot", layout="wide")
 
+st.markdown("""
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
 
-# ================= LLM =================
+.stApp {
+    padding-top: 60px;
+}
+
+.fixed-top-banner {
+    position: fixed;
+    top: 0;
+    left: 150px;
+    right: 0;
+    z-index: 9999;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 15px;
+    color: #333;
+    font-weight: 500;
+}
+
+.chat-scroll {
+    height: calc(100vh - 300px);
+    overflow-y: auto;
+    padding: 10px 0;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="fixed-top-banner">
+    Welcome to Multi-Document AI Chat Bot
+</div>
+""", unsafe_allow_html=True)
+
+
+# LLM
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
     temperature=0,
@@ -39,7 +78,7 @@ llm = ChatGroq(
 )
 
 
-# ================= SIDEBAR =================
+# SIDEBAR
 st.sidebar.title("📂 Data Sources")
 
 st.sidebar.subheader("Enter Article URLs")
@@ -80,12 +119,12 @@ uploaded_jsons = st.sidebar.file_uploader(
 process_clicked = st.sidebar.button("⚙️ Process Data")
 
 
-# ================= PROCESS DATA =================
+# PROCESS DATA
 if process_clicked:
     with st.spinner("Processing documents..."):
         documents = []
 
-        # -------- LOAD URLS --------
+        # LOAD URLS
         for url in urls:
             if not url.startswith("http"):
                 st.sidebar.warning(f"Invalid URL skipped: {url}")
@@ -102,7 +141,7 @@ if process_clicked:
             except Exception:
                 st.sidebar.warning(f"Failed to load URL: {url}")
 
-        # -------- LOAD WORD --------
+        # LOAD WORD
         if uploaded_docs:
             for file in uploaded_docs:
                 file_path = f"/tmp/{file.name}"
@@ -118,7 +157,7 @@ if process_clicked:
                 except Exception:
                     st.sidebar.warning(f"Failed to load Word file: {file.name}")
 
-        # -------- LOAD PDF --------
+        # LOAD PDF
         if uploaded_pdfs:
             for file in uploaded_pdfs:
                 file_path = f"/tmp/{file.name}"
@@ -134,7 +173,7 @@ if process_clicked:
                 except Exception:
                     st.sidebar.warning(f"Failed to load PDF file: {file.name}")
 
-        # -------- LOAD EXCEL --------
+        # LOAD EXCEL
         if uploaded_excels:
             for file in uploaded_excels:
                 file_path = f"/tmp/{file.name}"
@@ -163,7 +202,7 @@ if process_clicked:
                 except Exception:
                     st.sidebar.warning(f"Failed to load Excel file: {file.name}")
 
-        # -------- LOAD JSON --------
+        # LOAD JSON
         if uploaded_jsons:
             for file in uploaded_jsons:
                 file_path = f"/tmp/{file.name}"
@@ -195,7 +234,7 @@ if process_clicked:
                 except Exception:
                     st.sidebar.warning(f"Failed to load JSON file: {file.name}")
 
-        # -------- FINAL --------
+        # FINAL
         if not documents:
             st.sidebar.error("No valid URLs or documents found.")
         else:
@@ -215,7 +254,7 @@ if process_clicked:
             st.sidebar.success("✅ Data processed successfully!")
 
 
-# ================= CHAT =================
+# CHAT
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -253,3 +292,4 @@ if query:
     else:
         with st.chat_message("assistant"):
             st.warning("⚠️ Please process URLs or documents first.")
+
