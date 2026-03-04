@@ -224,8 +224,8 @@ if process_clicked:
 
             df = pd.read_excel(path)
 
+            df.columns = df.columns.str.strip()
             df = df.fillna("")
-
             df = df.head(100)
 
             for index, row in df.iterrows():
@@ -247,9 +247,6 @@ if process_clicked:
 
         except Exception as e:
             st.sidebar.warning(f"Failed {file.name}")
-
-                except:
-                    st.sidebar.warning(f"Failed {file.name}")
 
         # -------- JSON --------
 
@@ -367,4 +364,5 @@ if query:
     else:
 
         st.warning("⚠️ Please process documents first.")
+
 
