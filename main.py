@@ -12,7 +12,7 @@ from langchain.chains import RetrievalQA
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 
-from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import FastEmbedEmbeddings
 
 from langchain_community.document_loaders import (
@@ -20,36 +20,67 @@ from langchain_community.document_loaders import (
     PyPDFLoader
 )
 
-# -----------------------
+# -------------------
 # ENV
-# -----------------------
+# -------------------
 
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 
 if not groq_api_key:
-    st.error("GROQ_API_KEY not found")
+    st.error("❌ GROQ_API_KEY not found")
     st.stop()
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# -----------------------
+# -------------------
 # PAGE
-# -----------------------
+# -------------------
 
 st.set_page_config(page_title="AI ChatBot", layout="wide")
+
+st.markdown("""
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
+
+.stApp {
+    padding-top: 60px;
+}
+
+.fixed-top-banner {
+    position: fixed;
+    top: 0;
+    left: 150px;
+    right: 0;
+    z-index: 9999;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px 0;
+    text-align: center;
+    font-size: 15px;
+    color: #333;
+    font-weight: 500;
+}
+
+.chat-scroll {
+    height: calc(100vh - 300px);
+    overflow-y: auto;
+    padding: 10px 0;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown("""
 <div class="fixed-top-banner">
     Welcome to Multi-Document AI Chat Bot
 </div>
 """, unsafe_allow_html=True)
 
-st.title("📚 Multi Document AI ChatBot")
-st.caption("Works on Render Free Tier")
-
-# -----------------------
+# -------------------
 # LLM
-# -----------------------
+# -------------------
 
 llm = ChatGroq(
     model="llama-3.1-8b-instant",
@@ -58,16 +89,14 @@ llm = ChatGroq(
     groq_api_key=groq_api_key
 )
 
-# -----------------------
+# -------------------
 # SIDEBAR
-# -----------------------
+# -------------------
 
 st.sidebar.title("📂 Data Sources")
-
-st.sidebar.info("⚡ Free Render server may take 30 seconds to wake up")
+st.sidebar.subheader("Enter Article URLs")
 
 urls = []
-st.sidebar.subheader("Enter URLs (max 2)")
 
 for i in range(2):
     u = st.sidebar.text_input(f"URL {i+1}")
@@ -100,9 +129,9 @@ uploaded_jsons = st.sidebar.file_uploader(
 
 process_clicked = st.sidebar.button("⚙️ Process Data")
 
-# -----------------------
+# -------------------
 # PROCESS DATA
-# -----------------------
+# -------------------
 
 if process_clicked:
 
@@ -110,9 +139,7 @@ if process_clicked:
 
     with st.spinner("Processing documents..."):
 
-        # -----------------------
-        # LOAD URLS (Stable)
-        # -----------------------
+        # -------- URLs --------
 
         for url in urls:
 
@@ -128,7 +155,7 @@ if process_clicked:
 
                 text = soup.get_text(separator=" ", strip=True)
 
-                text = text[:10000]  # limit size
+                text = text[:10000]  # limit memory
 
                 documents.append(
                     Document(
@@ -140,9 +167,7 @@ if process_clicked:
             except Exception:
                 st.sidebar.warning(f"Failed: {url}")
 
-        # -----------------------
-        # WORD
-        # -----------------------
+        # -------- WORD --------
 
         if uploaded_docs:
 
@@ -163,9 +188,7 @@ if process_clicked:
                 except:
                     st.sidebar.warning(f"Failed {file.name}")
 
-        # -----------------------
-        # PDF
-        # -----------------------
+        # -------- PDF --------
 
         if uploaded_pdfs:
 
@@ -186,9 +209,7 @@ if process_clicked:
                 except:
                     st.sidebar.warning(f"Failed {file.name}")
 
-        # -----------------------
-        # EXCEL
-        # -----------------------
+        # -------- EXCEL --------
 
         if uploaded_excels:
 
@@ -201,11 +222,11 @@ if process_clicked:
 
                 try:
 
-                    data = pd.read_excel(path)
+                    df = pd.read_excel(path)
 
-                    data = data.head(50)
+                    df = df.head(50)
 
-                    for _, row in data.iterrows():
+                    for _, row in df.iterrows():
 
                         text = " ".join(str(v) for v in row)
 
@@ -219,9 +240,7 @@ if process_clicked:
                 except:
                     st.sidebar.warning(f"Failed {file.name}")
 
-        # -----------------------
-        # JSON
-        # -----------------------
+        # -------- JSON --------
 
         if uploaded_jsons:
 
@@ -237,7 +256,9 @@ if process_clicked:
                     with open(path) as f:
                         data = json.load(f)
 
-                    text = json.dumps(data)[:8000]
+                    text = json.dumps(data)
+
+                    text = text[:8000]
 
                     documents.append(
                         Document(
@@ -249,9 +270,7 @@ if process_clicked:
                 except:
                     st.sidebar.warning(f"Failed {file.name}")
 
-        # -----------------------
-        # LIMIT DOCUMENTS
-        # -----------------------
+        # -------- LIMIT DOCS --------
 
         documents = documents[:5]
 
@@ -274,7 +293,7 @@ if process_clicked:
                 model_name="BAAI/bge-small-en-v1.5"
             )
 
-            vectorstore = Chroma.from_documents(
+            vectorstore = FAISS.from_documents(
                 split_docs,
                 embeddings
             )
@@ -283,11 +302,11 @@ if process_clicked:
 
             gc.collect()
 
-            st.sidebar.success("Documents processed!")
+            st.sidebar.success("✅ Documents processed")
 
-# -----------------------
+# -------------------
 # CHAT
-# -----------------------
+# -------------------
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -301,10 +320,9 @@ query = st.chat_input("Ask about your documents")
 
 if query:
 
-    st.session_state.messages.append({
-        "role": "user",
-        "content": query
-    })
+    st.session_state.messages.append(
+        {"role": "user", "content": query}
+    )
 
     with st.chat_message("user"):
         st.markdown(query)
@@ -312,7 +330,7 @@ if query:
     if "vectorstore" in st.session_state:
 
         retriever = st.session_state.vectorstore.as_retriever(
-            search_kwargs={"k":3}
+            search_kwargs={"k": 3}
         )
 
         qa = RetrievalQA.from_chain_type(
@@ -331,11 +349,10 @@ if query:
 
                 st.markdown(answer)
 
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": answer
-        })
+        st.session_state.messages.append(
+            {"role": "assistant", "content": answer}
+        )
 
     else:
 
-        st.warning("Please process documents first")
+        st.warning("⚠️ Please process documents first.")
