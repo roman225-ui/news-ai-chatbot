@@ -213,29 +213,40 @@ if process_clicked:
 
         if uploaded_excels:
 
-            for file in uploaded_excels[:1]:
+    for file in uploaded_excels[:1]:
 
-                path = f"/tmp/{file.name}"
+        path = f"/tmp/{file.name}"
 
-                with open(path, "wb") as f:
-                    f.write(file.getbuffer())
+        with open(path, "wb") as f:
+            f.write(file.getbuffer())
 
-                try:
+        try:
 
-                    df = pd.read_excel(path)
+            df = pd.read_excel(path)
 
-                    df = df.head(50)
+            df = df.fillna("")
 
-                    for _, row in df.iterrows():
+            df = df.head(100)
 
-                        text = " ".join(str(v) for v in row)
+            for index, row in df.iterrows():
 
-                        documents.append(
-                            Document(
-                                page_content=text,
-                                metadata={"source": file.name}
-                            )
-                        )
+                row_text = ""
+
+                for column in df.columns:
+                    row_text += f"{column}: {row[column]}\n"
+
+                documents.append(
+                    Document(
+                        page_content=row_text,
+                        metadata={
+                            "source": file.name,
+                            "row": index
+                        }
+                    )
+                )
+
+        except Exception as e:
+            st.sidebar.warning(f"Failed {file.name}")
 
                 except:
                     st.sidebar.warning(f"Failed {file.name}")
@@ -356,3 +367,4 @@ if query:
     else:
 
         st.warning("⚠️ Please process documents first.")
+
